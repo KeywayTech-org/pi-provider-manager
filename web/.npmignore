@@ -1,0 +1,10 @@
+# Used by `npm pack`/`npm publish` when shipping web/dist in the pi package.
+# This replaces web/.gitignore for packing; do NOT list `dist` here so the
+# prebuilt frontend is included in the tarball.
+node_modules
+dist-ssr
+logs
+*.log
+*.local
+.vscode
+.idea

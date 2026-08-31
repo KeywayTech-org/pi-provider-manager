@@ -1,0 +1,8 @@
+# Never ship dependencies or local dev artifacts in the pi package tarball
+node_modules/
+web/node_modules/
+.scratch/
+.env
+.env.*
+*.log
+.DS_Store

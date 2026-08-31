@@ -1,0 +1,37 @@
+{
+  "name": "@keywaytech-org/pi-provider-manager",
+  "version": "0.1.0",
+  "description": "A pi-coding-agent extension that provides a local web UI to manage custom LLM API providers & models. Edit models.json + default provider/model/thinking-level, auto-backup, localhost-only.",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-coding-agent",
+    "pi",
+    "llm",
+    "llm-provider",
+    "openai-compatible",
+    "model-config",
+    "extension",
+    "typescript",
+    "react",
+    "vite"
+  ],
+  "license": "UNLICENSED",
+  "files": [
+    "provider-manager.ts",
+    "web/dist"
+  ],
+  "scripts": {
+    "build": "npm --prefix web run build",
+    "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./provider-manager.ts"
+    ],
+    "image": "https://raw.githubusercontent.com/KeywayTech-org/pi-provider-manager/master/docs/screenshots/01-overview.png"
+  }
+}

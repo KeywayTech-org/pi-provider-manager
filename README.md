@@ -56,13 +56,29 @@
 
 ## 📦 安装
 
-### 方式一（推荐）：克隆并接入 `settings.json`
+### 方式一：Pi Package 一键安装（推荐）
+
+本仓库已按 Pi Package 规范打包（根 `package.json` 含 `pi` 清单与 `pi-package` 关键字），发布到 npm 后即可通过 `pi install` 一键安装，并能在 Pi 的[包目录](https://pi.dev/packages)中检索：
+
+```bash
+# 从 git 安装（无需 npm 发布）
+pi install git:github.com/KeywayTech-org/pi-provider-manager
+
+# 从 npm 安装（发布后可用）
+pi install npm:@keywaytech-org/pi-provider-manager
+```
+
+执行 `/reload`，然后输入 `/providers`。
+
+> Pi 安装 npm/git 包时默认 `npm install --omit=dev`，不会自动构建前端。请先在本仓库执行 `npm run build`，确保 `web/dist` 已生成（npm 发布版会将该产物打进 tarball；git 安装则需手动构建后提交或先 `pi install` 再构建）。
+
+### 方式二：克隆并接入 `settings.json`
 
 先克隆本仓库并构建前端（前端产物 `web/dist` 不在版本控制内）：
 
 ```bash
 git clone https://github.com/KeywayTech-org/pi-provider-manager.git ~/pi-provider-manager
-cd ~/pi-provider-manager/web && npm install && npm run build
+cd ~/pi-provider-manager && npm --prefix web install && npm --prefix web run build
 ```
 
 在 `~/.pi/agent/settings.json` 顶层新增（或合并）数组，指向本扩展入口：
@@ -77,11 +93,21 @@ cd ~/pi-provider-manager/web && npm install && npm run build
 
 在 pi 内执行 `/reload`，然后输入 `/providers`。
 
-### 方式二：复制到自动发现目录
+### 方式三：复制到自动发现目录
 
 将 `provider-manager.ts` 复制到 `~/.pi/agent/extensions/`，执行 `/reload` 后即可。
 
 > 扩展默认会托管 `web/dist` 下的前端构建产物；请确保该目录存在，或先构建（见下文「从源码构建」）。
+
+### 发布到 Pi 包目录
+
+本仓库可作为 Pi Package 发布到 npm，被 [pi.dev/packages](https://pi.dev/packages) 目录收录：
+
+```bash
+npm login                      # 需已登录发布 npm 包（含 scope 权限）
+npm run build                  # 构建前端产物 web/dist
+npm publish                    # 发布；tarball 已通过 prepack 自动构建
+```
 
 ---
 
