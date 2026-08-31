@@ -28,6 +28,32 @@
 
 ---
 
+## 🖼 界面预览
+
+> 以下截图由本地开发环境与模拟配置数据生成，用于展示关键操作界面。
+
+管理页总览（供应商列表 + 编辑器 + 默认设置）：
+
+![管理页总览](docs/screenshots/01-overview.png)
+
+新增供应商：
+
+![新增供应商](docs/screenshots/02-add-provider.png)
+
+删除供应商（二次确认）：
+
+![删除供应商](docs/screenshots/03-delete-provider.png)
+
+测试连接（连通性 / 鉴权检查）：
+
+![测试连接](docs/screenshots/04-test-connection.png)
+
+保存成功（自动备份提示）：
+
+![保存成功](docs/screenshots/05-save-success.png)
+
+---
+
 ## 📦 安装
 
 ### 方式一（推荐）：接入 `settings.json`
