@@ -1,6 +1,4 @@
 "use client";
-
-import { Logo } from "@/components/logo";
 import {
 	Sidebar,
 	SidebarContent,
@@ -50,19 +48,11 @@ export function AppSidebar({
 
 	return (
 		<Sidebar
-			className="static min-h-full *:data-[slot=sidebar-inner]:bg-background"
+			className="static h-screen *:data-[slot=sidebar-inner]:bg-background"
 			collapsible="offcanvas"
 			variant="sidebar"
 		>
-			<SidebarHeader className="relative h-14 justify-center px-2 py-0">
-				<a
-					className="rounded-lg flex h-10 w-max items-center justify-center gap-2 px-3 hover:bg-muted dark:hover:bg-muted/50"
-					href="#"
-				>
-					<Logo className="h-4" />
-					<span className="text-sm font-medium">Provider Manager</span>
-				</a>
-			</SidebarHeader>
+			<SidebarHeader className="relative h-14 items-center justify-center px-3"><span className="text-sm font-medium">Provider Manager</span></SidebarHeader>
 
 			<SidebarContent>
 				<SidebarGroup>

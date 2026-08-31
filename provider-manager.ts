@@ -111,7 +111,7 @@ function mimeType(file: string): string {
 async function serveFile(res: http.ServerResponse, file: string): Promise<void> {
   try {
     const data = await fs.readFile(file);
-    res.writeHead(200, { "Content-Type": mimeType(file) });
+    res.writeHead(200, { "Content-Type": mimeType(file), "Cache-Control": "no-store" });
     res.end(data);
   } catch {
     send(res, 404, "text/plain; charset=utf-8", "not found");
