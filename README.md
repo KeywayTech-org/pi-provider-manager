@@ -65,7 +65,7 @@
 pi install git:github.com/KeywayTech-org/pi-provider-manager
 
 # 从 npm 安装（发布后可用）
-pi install npm:@keywaytech-org/pi-provider-manager
+pi install npm:@keywaytech/pi-provider-manager
 ```
 
 执行 `/reload`，然后输入 `/providers`。

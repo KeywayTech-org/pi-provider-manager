@@ -1,5 +1,5 @@
 {
-  "name": "@keywaytech-org/pi-provider-manager",
+  "name": "@keywaytech/pi-provider-manager",
   "version": "0.1.0",
   "description": "A pi-coding-agent extension that provides a local web UI to manage custom LLM API providers & models. Edit models.json + default provider/model/thinking-level, auto-backup, localhost-only.",
   "type": "module",
