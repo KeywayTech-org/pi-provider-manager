@@ -56,14 +56,21 @@
 
 ## 📦 安装
 
-### 方式一（推荐）：接入 `settings.json`
+### 方式一（推荐）：克隆并接入 `settings.json`
+
+先克隆本仓库并构建前端（前端产物 `web/dist` 不在版本控制内）：
+
+```bash
+git clone https://github.com/KeywayTech-org/pi-provider-manager.git ~/pi-provider-manager
+cd ~/pi-provider-manager/web && npm install && npm run build
+```
 
 在 `~/.pi/agent/settings.json` 顶层新增（或合并）数组，指向本扩展入口：
 
 ```json
 {
   "extensions": [
-    "D:/Taozhuowei/KeywayTech/projects/demo/pi-provider-manager/provider-manager.ts"
+    "~/pi-provider-manager/provider-manager.ts"
   ]
 }
 ```
