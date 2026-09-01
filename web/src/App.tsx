@@ -18,7 +18,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import {
 	getConfig,
 	saveConfig,
-	testProvider,
 	type Provider,
 	type Settings,
 } from "@/lib/api";
@@ -105,22 +104,6 @@ export default function App() {
 		setDelTarget(null);
 		persist(next, settings);
 	}
-	function handleTest() {
-		if (!selected) return;
-		testProvider(selected)
-			.then((j) => {
-				if (j.ok) {
-					toast.success(
-						"连接正常 (" + (j.status ?? "?") + ")" +
-							(j.body ? " — " + j.body.slice(0, 120) : "")
-					);
-				} else {
-					toast.error("失败: " + (j.error || "HTTP " + j.status));
-				}
-			})
-			.catch((e) => toast.error("失败: " + String((e as Error)?.message || e)));
-	}
-
 	return (
 		<>
 			<AppShell
@@ -151,7 +134,6 @@ export default function App() {
 						name={selected}
 						provider={providers[selected]}
 						onSave={handleSaveProvider}
-						onTest={handleTest}
 					/>
 				) : (
 					<div className="flex flex-1 items-center justify-center">

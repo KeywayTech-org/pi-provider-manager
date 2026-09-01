@@ -72,7 +72,40 @@ export async function saveConfig(payload: SavePayload): Promise<{ ok: boolean; e
   return r.json();
 }
 
-export async function testProvider(name: string): Promise<{ ok: boolean; status?: number; body?: string; error?: string }> {
-  const r = await fetch("/api/test?provider=" + encodeURIComponent(name));
+export type FetchModelsReq = {
+  provider?: string;
+  baseUrl?: string;
+  api?: string;
+  apiKey?: string;
+  headers?: any;
+};
+
+export async function testProvider(
+  req: string | FetchModelsReq
+): Promise<{ ok: boolean; status?: number; body?: string; error?: string }> {
+  if (typeof req === "string") {
+    const r = await fetch("/api/test?provider=" + encodeURIComponent(req));
+    return r.json();
+  }
+  const r = await fetch("/api/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  return r.json();
+}
+
+export async function fetchModels(
+  req: string | FetchModelsReq
+): Promise<{ ok: boolean; models?: Model[]; error?: string; attempts?: string[] }> {
+  if (typeof req === "string") {
+    const r = await fetch("/api/models?provider=" + encodeURIComponent(req));
+    return r.json();
+  }
+  const r = await fetch("/api/models", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
   return r.json();
 }

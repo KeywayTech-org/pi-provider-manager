@@ -75,6 +75,15 @@ await t("PUT 已自动备份", () => {
   assert.strictEqual(saved.providers.free.baseUrl, "https://y/v1"); // 备份是 PUT 前的原始内容
 });
 
+const modelFetchMissing = await (await fetch(base + "api/models", {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ baseUrl: "" }),
+})).json();
+await t("POST /api/models 无 baseUrl 时返回错误", () => {
+  assert.strictEqual(modelFetchMissing.ok, false);
+  assert.match(modelFetchMissing.error, /Base URL/);
+});
+
 await t("首页返回 HTML", async () => {
   const r = await fetch(base);
   assert.match(await r.text(), /pi Provider Manager/);

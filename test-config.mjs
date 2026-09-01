@@ -4,7 +4,7 @@ const require = createRequire(import.meta.url);
 const { createJiti } = require("C:/Users/87659/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti");
 const jiti = createJiti(import.meta.url);
 const mod = await jiti("./provider-manager.ts");
-const { maskKey, mergeProviders, default: factory } = mod;
+const { maskKey, mergeProviders, normalizeModelItem, buildProviderRequest, default: factory } = mod;
 
 let n = 0;
 function t(name, fn) { fn(); n++; console.log("  ✓ " + name); }
@@ -51,6 +51,30 @@ t("模型按 id 合并并覆盖编辑字段", () => {
   const r = mergeProviders({ a: { models: [{ id: "m1", contextWindow: 2000 }] } }, orig).a;
   assert.strictEqual(r.models[0].cost.input, 1);
   assert.strictEqual(r.models[0].contextWindow, 2000);
+});
+
+console.log("normalizeModelItem & buildProviderRequest:");
+t("Gemini 前缀去除与视觉推断", () => {
+  const m = normalizeModelItem({ name: "models/gemini-1.5-pro", displayName: "Gemini 1.5 Pro", inputTokenLimit: 2000000 });
+  assert.strictEqual(m.id, "gemini-1.5-pro");
+  assert.strictEqual(m.name, "Gemini 1.5 Pro");
+  assert.strictEqual(m.contextWindow, 2000000);
+  assert.deepStrictEqual(m.input, ["text", "image"]);
+});
+t("推理模型自动识别 reasoning: true", () => {
+  const m = normalizeModelItem("deepseek-r1-distill-qwen-32b");
+  assert.strictEqual(m.id, "deepseek-r1-distill-qwen-32b");
+  assert.strictEqual(m.reasoning, true);
+});
+t("Anthropic 鉴权头构建", () => {
+  const req = buildProviderRequest("https://api.anthropic.com/v1", "anthropic-messages", "sk-ant-123");
+  assert.strictEqual(req.headers["x-api-key"], "sk-ant-123");
+  assert.strictEqual(req.headers["anthropic-version"], "2023-06-01");
+});
+t("OpenAI 鉴权头构建与 URL 备选", () => {
+  const req = buildProviderRequest("https://api.example.com", "openai-completions", "sk-test");
+  assert.strictEqual(req.headers["Authorization"], "Bearer sk-test");
+  assert.deepStrictEqual(req.targetUrls, ["https://api.example.com/v1/models", "https://api.example.com/models"]);
 });
 
 console.log("模块:");

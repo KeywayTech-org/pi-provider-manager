@@ -1,10 +1,18 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import http from "node:http";
-import { promises as fs } from "node:fs";
+import { promises as fs, appendFileSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+
+/** 追加一行到 ~/.pi/agent/pm-debug.log 并同步打印到 stderr。 */
+function pmLog(msg: string): void {
+  const ts = new Date().toISOString().slice(0, 19).replace("T", " ");
+  const line = `[${ts}] ${msg}\n`;
+  try { appendFileSync(join(homedir(), ".pi", "agent", "pm-debug.log"), line, "utf8"); } catch {}
+  console.error("[provider-manager]", msg);
+}
 
 const MASK = "••••••";
 const DEFAULT_SETTINGS_KEYS = ["defaultProvider", "defaultModel", "defaultThinkingLevel"];
@@ -33,6 +41,233 @@ export function maskKey(providers: Record<string, any>): Record<string, any> {
     out[name] = { ...p, apiKey: p.apiKey ? MASK : "" };
   }
   return out;
+}
+
+export interface NormalizedModel {
+  id: string;
+  name?: string;
+  reasoning?: boolean;
+  input?: ("text" | "image")[];
+  contextWindow?: number;
+  maxTokens?: number;
+  [k: string]: any;
+}
+
+export function isReasoningModel(id: string): boolean {
+  return /o1|o3|r1|reasoner|thinking|deepseek-r1|qwq/i.test(id);
+}
+
+export function isVisionModel(id: string): boolean {
+  return /4o|vision|vl|omni|claude-3|gemini|pixtral|qwen.*vl|florence|llava|glm-4v/i.test(id);
+}
+
+export function normalizeModelItem(m: any): NormalizedModel | null {
+  if (!m) return null;
+  const rawId = typeof m === "string" ? m : m.id || m.name || "";
+  if (!rawId || typeof rawId !== "string") return null;
+
+  // 剔除 Google Gemini 等返回的 "models/" 前缀
+  const id = rawId.startsWith("models/") ? rawId.slice(7) : rawId;
+  const rawName = typeof m === "object" && (m.displayName || m.name || m.display_name);
+  const name = rawName && typeof rawName === "string" && rawName !== rawId ? rawName : undefined;
+
+  const reasoning = typeof m === "object" && m.reasoning !== undefined
+    ? Boolean(m.reasoning)
+    : isReasoningModel(id);
+
+  let input: ("text" | "image")[] = ["text"];
+  if (typeof m === "object" && Array.isArray(m.input)) {
+    input = m.input.filter((x: any) => x === "text" || x === "image");
+  } else if (isVisionModel(id)) {
+    input = ["text", "image"];
+  }
+
+  const rawContext = typeof m === "object"
+    ? (m.contextWindow || m.context_window || m.context_length || m.inputTokenLimit || m.max_input_tokens || m.max_context_length || m.max_model_len)
+    : undefined;
+  const contextWindow = typeof rawContext === "number" && !isNaN(rawContext) && rawContext > 0 ? rawContext : undefined;
+
+  const rawMaxTokens = typeof m === "object"
+    ? (m.maxTokens || m.max_tokens || m.max_output_tokens || m.outputTokenLimit || m.top_provider?.max_completion_tokens)
+    : undefined;
+  const maxTokens = typeof rawMaxTokens === "number" && !isNaN(rawMaxTokens) && rawMaxTokens > 0 ? rawMaxTokens : undefined;
+
+  const res: NormalizedModel = { id };
+  if (name) res.name = name;
+  if (reasoning) res.reasoning = true;
+  if (input.length > 0) res.input = input;
+  if (contextWindow) res.contextWindow = contextWindow;
+  if (maxTokens) res.maxTokens = maxTokens;
+
+  return res;
+}
+
+export function buildProviderRequest(
+  baseUrl: string,
+  api?: string,
+  apiKey?: string,
+  customHeaders?: Record<string, string>
+): { targetUrls: string[]; headers: Record<string, string> } {
+  const cleanBase = baseUrl.trim().replace(/\/+$/, "");
+  const headers: Record<string, string> = { ...(customHeaders || {}) };
+
+  const key = apiKey?.trim();
+  if (key && key !== MASK) {
+    if (api === "anthropic-messages") {
+      headers["x-api-key"] = key;
+      if (!headers["anthropic-version"]) headers["anthropic-version"] = "2023-06-01";
+    } else if (api === "google-generative-ai" || cleanBase.includes("googleapis.com")) {
+      headers["x-goog-api-key"] = key;
+    } else if (api === "azure-openai-responses") {
+      headers["api-key"] = key;
+    } else {
+      headers["Authorization"] = "Bearer " + key;
+    }
+  }
+
+  const targetUrls: string[] = [];
+  if (cleanBase.includes(":11434") || cleanBase.includes("ollama")) {
+    targetUrls.push(`${cleanBase}/v1/models`, `${cleanBase}/api/tags`, `${cleanBase}/models`);
+  } else if (api === "google-generative-ai" || cleanBase.includes("googleapis.com")) {
+    targetUrls.push(`${cleanBase}/models`, `${cleanBase}/v1beta/models`);
+  } else {
+    // 大多数 OpenAI-compatible 供应商通过 /v1/models，先试它；/models 作为备选
+    if (!cleanBase.endsWith("/v1")) {
+      targetUrls.push(`${cleanBase}/v1/models`);
+    }
+    targetUrls.push(`${cleanBase}/models`);
+  }
+
+  return { targetUrls, headers };
+}
+
+/**
+ * 从供应商拉取模型列表，支持传入草稿参数（baseUrl/apiKey/headers/api）或按 provider 查磁盘。
+ */
+export async function fetchRemoteModels(params: {
+  provider?: string;
+  baseUrl?: string;
+  api?: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+}): Promise<{ ok: boolean; models?: NormalizedModel[]; error?: string; attempts?: string[] }> {
+  const { models: modelsFile } = configPaths();
+  const diskModels = await readJson(modelsFile);
+  const diskProvider = params.provider ? (diskModels.providers || {})[params.provider] : undefined;
+
+  let baseUrl = params.baseUrl || diskProvider?.baseUrl;
+  if (!baseUrl) return { ok: false, error: "请提供 Base URL" };
+  baseUrl = baseUrl.trim();
+
+  const api = params.api || diskProvider?.api || "openai-completions";
+  let apiKey = params.apiKey;
+  if (apiKey === undefined || apiKey === "" || apiKey === MASK) {
+    apiKey = diskProvider?.apiKey || "";
+  }
+  const headers = { ...(diskProvider?.headers || {}), ...(params.headers || {}) };
+
+  const { targetUrls, headers: reqHeaders } = buildProviderRequest(baseUrl, api, apiKey, headers);
+
+  pmLog(`fetchRemoteModels start: urls=${JSON.stringify(targetUrls)} api=${api}`);
+  const attempts: string[] = [];
+  let lastError = "";
+  let lastStatus = 0;
+
+  for (const target of targetUrls) {
+    try {
+      pmLog(`  → trying: ${target}`);
+      const r = await fetch(target, { headers: reqHeaders, signal: AbortSignal.timeout(15000) });
+      lastStatus = r.status;
+      const attemptBase = `GET ${target} → ${r.status}`;
+      if (r.status === 404 && targetUrls.length > 1) {
+        attempts.push(attemptBase + " (404, skipped)");
+        pmLog(`  ← ${attemptBase} (404, try next)`);
+        continue;
+      }
+      if (!r.ok) {
+        const errText = (await r.text().catch(() => "")).slice(0, 300);
+        lastError = `HTTP ${r.status}${errText ? ": " + errText : ""}`;
+        attempts.push(`${attemptBase} (${errText.slice(0, 80)})`);
+        pmLog(`  ✗ ${attemptBase}: ${errText.slice(0, 80)}`);
+        continue;
+      }
+      const json = await r.json();
+      const rawList = Array.isArray(json)
+        ? json
+        : Array.isArray(json.data)
+        ? json.data
+        : Array.isArray(json.models)
+        ? json.models
+        : Array.isArray(json.result)
+        ? json.result
+        : [];
+
+      const list = rawList.map(normalizeModelItem).filter(Boolean) as NormalizedModel[];
+      attempts.push(`${attemptBase} ✓ (${list.length} models)`);
+      pmLog(`  ✓ ${target}: got ${list.length} models`);
+      return { ok: true, models: list, attempts };
+    } catch (e) {
+      lastError = String((e as Error)?.message || e);
+      attempts.push(`GET ${target} → ERROR: ${lastError}`);
+      pmLog(`  ✗ ${target}: ${lastError}`);
+    }
+  }
+
+  pmLog(`fetchRemoteModels failed: ${lastError || lastStatus}`);
+  return { ok: false, error: lastError || (lastStatus ? `HTTP ${lastStatus}` : "请求失败"), attempts };
+}
+
+/**
+ * 测试供应商连通性，支持草稿参数。
+ */
+export async function testRemoteProvider(params: {
+  provider?: string;
+  baseUrl?: string;
+  api?: string;
+  apiKey?: string;
+  headers?: Record<string, string>;
+}): Promise<{ ok: boolean; status?: number; body?: string; error?: string }> {
+  const { models: modelsFile } = configPaths();
+  const diskModels = await readJson(modelsFile);
+  const diskProvider = params.provider ? (diskModels.providers || {})[params.provider] : undefined;
+
+  let baseUrl = params.baseUrl || diskProvider?.baseUrl;
+  if (!baseUrl) return { ok: false, error: "请提供 Base URL" };
+  baseUrl = baseUrl.trim();
+
+  const api = params.api || diskProvider?.api || "openai-completions";
+  let apiKey = params.apiKey;
+  if (apiKey === undefined || apiKey === "" || apiKey === MASK) {
+    apiKey = diskProvider?.apiKey || "";
+  }
+  const headers = { ...(diskProvider?.headers || {}), ...(params.headers || {}) };
+
+  const { targetUrls, headers: reqHeaders } = buildProviderRequest(baseUrl, api, apiKey, headers);
+
+  pmLog(`testRemoteProvider start: urls=${JSON.stringify(targetUrls)} api=${api}`);
+  let lastResult: { ok: boolean; status?: number; body?: string; error?: string } = {
+    ok: false,
+    error: "连接失败",
+  };
+
+  for (const target of targetUrls) {
+    try {
+      pmLog(`  → trying: ${target}`);
+      const r = await fetch(target, { headers: reqHeaders, signal: AbortSignal.timeout(8000) });
+      const text = await r.text();
+      pmLog(`  ← ${target} → ${r.status}`);
+      if (r.status === 404 && targetUrls.length > 1) {
+        lastResult = { ok: false, status: r.status, body: text.slice(0, 600) };
+        continue;
+      }
+      return { ok: r.ok, status: r.status, body: text.slice(0, 600) };
+    } catch (e) {
+      lastResult = { ok: false, error: String((e as Error)?.message || e) };
+      pmLog(`  ✗ ${target}: ${lastResult.error}`);
+    }
+  }
+
+  return lastResult;
 }
 
 /**
@@ -190,22 +425,45 @@ async function handle(req: http.IncomingMessage, res: http.ServerResponse): Prom
     return sendJson(res, 200, { ok: true });
   }
 
-  if (req.method === "GET" && url.pathname === "/api/test") {
-    const { models: modelsFile } = configPaths();
-    const name = url.searchParams.get("provider") || "";
-    const models = await readJson(modelsFile);
-    const p = (models.providers || {})[name];
-    if (!p || !p.baseUrl) return sendJson(res, 404, { ok: false, error: "供应商不存在或无 baseUrl" });
-    const target = p.baseUrl.replace(/\/+$/, "") + "/models";
-    const headers: Record<string, string> = { ...(p.headers || {}) };
-    if (p.apiKey) headers["Authorization"] = "Bearer " + p.apiKey;
-    try {
-      const r = await fetch(target, { headers, signal: AbortSignal.timeout(8000) });
-      const text = await r.text();
-      return sendJson(res, 200, { ok: r.ok, status: r.status, body: text.slice(0, 600) });
-    } catch (e) {
-      return sendJson(res, 200, { ok: false, error: String((e as Error)?.message || e) });
+  if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/models") {
+    let params: any = {};
+    if (req.method === "POST") {
+      params = JSON.parse((await readBody(req)) || "{}");
+    } else {
+      params = {
+        provider: url.searchParams.get("provider") || undefined,
+        baseUrl: url.searchParams.get("baseUrl") || undefined,
+        api: url.searchParams.get("api") || undefined,
+        apiKey: url.searchParams.get("apiKey") || undefined,
+      };
     }
+    const result = await fetchRemoteModels(params);
+    return sendJson(res, result.ok ? 200 : 400, result);
+  }
+
+  if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/test") {
+    let params: any = {};
+    if (req.method === "POST") {
+      params = JSON.parse((await readBody(req)) || "{}");
+    } else {
+      params = {
+        provider: url.searchParams.get("provider") || undefined,
+        baseUrl: url.searchParams.get("baseUrl") || undefined,
+        api: url.searchParams.get("api") || undefined,
+        apiKey: url.searchParams.get("apiKey") || undefined,
+      };
+    }
+    const result = await testRemoteProvider(params);
+    return sendJson(res, 200, result);
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/log") {
+    const logPath = join(homedir(), ".pi", "agent", "pm-debug.log");
+    let content = "";
+    try { content = readFileSync(logPath, "utf8"); } catch {}
+    const lines = content.split("\n");
+    const tail = lines.slice(-200).join("\n");
+    return sendJson(res, 200, { ok: true, content: tail });
   }
 
   return sendJson(res, 404, { ok: false, error: "not found" });

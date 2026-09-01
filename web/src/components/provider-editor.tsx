@@ -29,8 +29,18 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { Plus, PlugZap, Trash2 } from "lucide-react";
-import { API_TYPES, type Model, type Provider } from "@/lib/api";
+import { Download, Plus, PlugZap, Trash2, Search, Brain, Eye, ScrollText } from "lucide-react";
+import { API_TYPES, fetchModels, testProvider, type Model, type Provider } from "@/lib/api";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 type FormState = {
@@ -58,12 +68,10 @@ export function ProviderEditor({
 	name,
 	provider,
 	onSave,
-	onTest,
 }: {
 	name: string;
 	provider: Provider;
 	onSave: (edited: Provider) => void;
-	onTest: () => void;
 }) {
 	const [form, setForm] = useState<FormState>(() => ({
 		name: provider.name || "",
@@ -75,6 +83,143 @@ export function ProviderEditor({
 		models: provider.models ?? [],
 	}));
 	const set = (patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch }));
+
+	/* 从供应商 /models 接口拉取模型并选择添加 */
+	const [fetchOpen, setFetchOpen] = useState(false);
+	const [fetchLoading, setFetchLoading] = useState(false);
+	const [remoteModels, setRemoteModels] = useState<Model[]>([]);
+	const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
+	const [searchQuery, setSearchQuery] = useState("");
+
+	/* 调试日志 dialog */
+	const [logOpen, setLogOpen] = useState(false);
+	const [logContent, setLogContent] = useState("");
+	const [logLoading, setLogLoading] = useState(false);
+
+	async function openLog() {
+		setLogOpen(true);
+		setLogLoading(true);
+		try {
+			const r = await fetch("/api/log");
+			const j = await r.json();
+			setLogContent(j.content || "(暂无日志)");
+		} catch (e) {
+			setLogContent("读取日志失败: " + String((e as Error)?.message || e));
+		} finally {
+			setLogLoading(false);
+		}
+	}
+
+	async function handleFetch() {
+		const baseUrl = form.baseUrl.trim();
+		if (!baseUrl) {
+			toast.error("请先填写 Base URL");
+			return;
+		}
+		let headers: any;
+		try {
+			headers = parseJson(form.headers, "headers");
+		} catch {
+			return;
+		}
+		setFetchOpen(true);
+		setFetchLoading(true);
+		setSearchQuery("");
+		try {
+			const j = await fetchModels({
+				provider: name,
+				baseUrl,
+				api: form.api,
+				apiKey: form.apiKey,
+				headers,
+			});
+			if (!j.ok) throw new Error(
+			(j.error || "请求失败") +
+			(j.attempts?.length ? "\n\u5c1d试情况:\n" + j.attempts.join("\n") : "")
+		);
+			const models = j.models || [];
+			setRemoteModels(models);
+			const existing = new Set(form.models.map((m) => m.id));
+			const fresh = models.filter((m) => !existing.has(m.id)).map((m) => m.id);
+			setCheckedIds(new Set(fresh.length > 0 ? fresh : models.map((m) => m.id)));
+		} catch (e) {
+			toast.error("获取模型失败: " + String((e as Error)?.message || e));
+			setFetchOpen(false);
+		} finally {
+			setFetchLoading(false);
+		}
+	}
+
+	function applyChecked() {
+		const existingMap = new Map(form.models.map((m) => [m.id, m]));
+		const remoteMap = new Map(remoteModels.map((m) => [m.id, m]));
+		const updatedModels = [...form.models];
+		let addedCount = 0;
+		let updatedCount = 0;
+
+		for (const id of checkedIds) {
+			const remote = remoteMap.get(id);
+			if (!remote) continue;
+			const existing = existingMap.get(id);
+			if (existing) {
+				const idx = updatedModels.findIndex((m) => m.id === id);
+				if (idx !== -1) {
+					updatedModels[idx] = {
+						...remote,
+						...existing,
+						name: existing.name || remote.name,
+						reasoning: existing.reasoning !== undefined ? existing.reasoning : remote.reasoning,
+						input: existing.input && existing.input.length > 0 ? existing.input : remote.input,
+						contextWindow: existing.contextWindow || remote.contextWindow,
+						maxTokens: existing.maxTokens || remote.maxTokens,
+					};
+					updatedCount++;
+				}
+			} else {
+				updatedModels.push({ ...remote });
+				addedCount++;
+			}
+		}
+
+		set({ models: updatedModels });
+		setFetchOpen(false);
+		const msgs = [];
+		if (addedCount > 0) msgs.push(`新增 ${addedCount} 个`);
+		if (updatedCount > 0) msgs.push(`更新 ${updatedCount} 个`);
+		toast.success(`已导入模型（${msgs.join("，")}），点「保存供应商」写入`);
+	}
+
+	function handleTest() {
+		const baseUrl = form.baseUrl.trim();
+		if (!baseUrl) {
+			toast.error("请先填写 Base URL");
+			return;
+		}
+		let headers: any;
+		try {
+			headers = parseJson(form.headers, "headers");
+		} catch {
+			return;
+		}
+		testProvider({
+			provider: name,
+			baseUrl,
+			api: form.api,
+			apiKey: form.apiKey,
+			headers,
+		})
+			.then((j) => {
+				if (j.ok) {
+					toast.success(
+						"连接正常 (" + (j.status ?? "200") + ")" +
+							(j.body ? " — " + j.body.slice(0, 120) : "")
+					);
+				} else {
+					toast.error("连接失败: " + (j.error || "HTTP " + j.status));
+				}
+			})
+			.catch((e) => toast.error("连接失败: " + String((e as Error)?.message || e)));
+	}
 
 	function setModel(i: number, patch: Partial<Model>) {
 		set({ models: form.models.map((m, idx) => (idx === i ? { ...m, ...patch } : m)) });
@@ -189,10 +334,19 @@ export function ProviderEditor({
 				<div className="space-y-2">
 					<div className="flex items-center justify-between">
 						<Label>模型列表</Label>
-						<Button size="sm" variant="outline" onClick={addModel}>
-							<Plus className="size-4" />
-							新增模型
-						</Button>
+						<div className="flex gap-2">
+							<Button size="sm" variant="outline" onClick={handleFetch}>
+								<Download className="size-4" />
+								获取模型
+							</Button>
+							<Button size="sm" variant="ghost" onClick={openLog} title="查看调试日志">
+								<ScrollText className="size-4" />
+							</Button>
+							<Button size="sm" variant="outline" onClick={addModel}>
+								<Plus className="size-4" />
+								新增模型
+							</Button>
+						</div>
 					</div>
 					<div className="rounded-md border">
 						<Table>
@@ -302,12 +456,185 @@ export function ProviderEditor({
 				</div>
 			</CardContent>
 			<CardFooter className="justify-end gap-2">
-				<Button variant="outline" onClick={onTest}>
+				<Button variant="outline" onClick={handleTest}>
 					<PlugZap className="size-4" />
 					测试连接
 				</Button>
 				<Button onClick={handleSave}>保存供应商</Button>
 			</CardFooter>
+
+			<Dialog open={fetchOpen} onOpenChange={(o) => !fetchLoading && setFetchOpen(o)}>
+				<DialogContent className="sm:max-w-xl">
+					<DialogHeader>
+						<DialogTitle>从接口获取模型</DialogTitle>
+						<DialogDescription>
+							勾选要导入的模型，系统已自动解析特性（思考/视觉/上下文）。
+						</DialogDescription>
+					</DialogHeader>
+
+					{fetchLoading ? (
+						<div className="py-12 text-center text-sm text-muted-foreground">
+							正在连接供应商接口拉取模型列表…
+						</div>
+					) : remoteModels.length === 0 ? (
+						<div className="py-12 text-center text-sm text-muted-foreground">
+							未从接口获取到模型
+						</div>
+					) : (
+						<div className="space-y-3">
+							<div className="flex items-center gap-2">
+								<div className="relative flex-1">
+									<Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+									<Input
+										value={searchQuery}
+										onChange={(e) => setSearchQuery(e.target.value)}
+										placeholder="搜索模型 ID 或名称…"
+										className="pl-8 text-sm"
+									/>
+								</div>
+								<Button
+									size="sm"
+									variant="outline"
+									onClick={() => {
+										const q = searchQuery.trim().toLowerCase();
+										const matching = remoteModels
+											.filter((m) => !q || m.id.toLowerCase().includes(q) || (m.name && m.name.toLowerCase().includes(q)))
+											.map((m) => m.id);
+										setCheckedIds((prev) => new Set([...prev, ...matching]));
+									}}
+								>
+									全选
+								</Button>
+								<Button
+									size="sm"
+									variant="outline"
+									onClick={() => {
+										const q = searchQuery.trim().toLowerCase();
+										const matchingSet = new Set(
+											remoteModels
+												.filter((m) => !q || m.id.toLowerCase().includes(q) || (m.name && m.name.toLowerCase().includes(q)))
+												.map((m) => m.id)
+										);
+										setCheckedIds((prev) => {
+											const next = new Set(prev);
+											for (const id of matchingSet) next.delete(id);
+											return next;
+										});
+									}}
+								>
+									全不选
+								</Button>
+							</div>
+
+							<div className="max-h-80 space-y-1.5 overflow-y-auto pr-1">
+								{remoteModels
+									.filter((m) => {
+										const q = searchQuery.trim().toLowerCase();
+										if (!q) return true;
+										return m.id.toLowerCase().includes(q) || (m.name && m.name.toLowerCase().includes(q));
+									})
+									.map((m) => {
+										const isExisting = form.models.some((item) => item.id === m.id);
+										const isChecked = checkedIds.has(m.id);
+										return (
+											<label
+												key={m.id}
+												className={cn(
+													"flex cursor-pointer items-center justify-between gap-3 rounded-lg border p-2.5 text-sm transition-colors hover:bg-accent/40",
+													isChecked && "border-primary/50 bg-accent/20"
+												)}
+											>
+												<div className="flex min-w-0 items-center gap-2.5">
+													<input
+														type="checkbox"
+														checked={isChecked}
+														onChange={() =>
+															setCheckedIds((prev) => {
+																const next = new Set(prev);
+																if (next.has(m.id)) next.delete(m.id);
+																else next.add(m.id);
+																return next;
+															})
+														}
+														className="size-4 rounded accent-primary"
+													/>
+													<div className="min-w-0 space-y-0.5">
+														<div className="flex items-center gap-2">
+															<span className="font-mono text-sm font-medium leading-none">
+																{m.id}
+															</span>
+															{isExisting && (
+																<Badge variant="outline" className="text-[10px] text-muted-foreground">
+																	已在列表中
+																</Badge>
+															)}
+														</div>
+														{m.name && m.name !== m.id && (
+															<div className="truncate text-xs text-muted-foreground">
+																{m.name}
+															</div>
+														)}
+													</div>
+												</div>
+												<div className="flex shrink-0 items-center gap-1.5">
+													{m.reasoning && (
+														<Badge variant="secondary" className="gap-1 text-[10px]">
+															<Brain className="size-3" />
+															思考
+														</Badge>
+													)}
+													{m.input?.includes("image") && (
+														<Badge variant="secondary" className="gap-1 text-[10px]">
+															<Eye className="size-3" />
+															视觉
+														</Badge>
+													)}
+													{m.contextWindow ? (
+														<Badge variant="outline" className="text-[10px] font-mono">
+															{m.contextWindow >= 1000
+																? `${Math.round(m.contextWindow / 1000)}k`
+																: m.contextWindow}
+														</Badge>
+													) : null}
+												</div>
+											</label>
+										);
+									})}
+							</div>
+						</div>
+					)}
+
+					<DialogFooter className="flex items-center justify-between sm:justify-between">
+						<div className="text-xs text-muted-foreground">
+							已勾选 {checkedIds.size} / {remoteModels.length} 个模型
+						</div>
+						<div className="flex gap-2">
+							<Button variant="outline" onClick={() => setFetchOpen(false)}>
+								取消
+							</Button>
+							<Button disabled={checkedIds.size === 0} onClick={applyChecked}>
+								导入 {checkedIds.size} 个模型
+							</Button>
+						</div>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+
+			{/* 调试日志 Dialog */}
+			<Dialog open={logOpen} onOpenChange={setLogOpen}>
+				<DialogContent className="max-w-3xl">
+					<DialogHeader>
+						<DialogTitle>调试日志（~/.pi/agent/pm-debug.log 最近 200 行）</DialogTitle>
+					</DialogHeader>
+					<pre className="max-h-[60vh] overflow-auto rounded bg-muted p-3 text-xs font-mono whitespace-pre-wrap break-all">
+						{logLoading ? "加载中..." : (logContent || "(暂无日志)")}
+					</pre>
+					<DialogFooter>
+						<Button variant="outline" onClick={openLog} disabled={logLoading}>刷新</Button>
+						<Button variant="outline" onClick={() => setLogOpen(false)}>关闭</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
 		</Card>
 	);
 }
