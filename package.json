@@ -33,5 +33,8 @@
       "./provider-manager.ts"
     ],
     "image": "https://raw.githubusercontent.com/KeywayTech-org/pi-provider-manager/master/docs/screenshots/01-overview.png"
+  },
+  "devDependencies": {
+    "jiti": "^2.7.0"
   }
 }

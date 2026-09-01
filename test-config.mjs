@@ -1,7 +1,5 @@
-import { createRequire } from "node:module";
 import assert from "node:assert";
-const require = createRequire(import.meta.url);
-const { createJiti } = require("C:/Users/87659/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti");
+import { createJiti } from "jiti";
 const jiti = createJiti(import.meta.url);
 const mod = await jiti("./provider-manager.ts");
 const { maskKey, mergeProviders, normalizeModelItem, buildProviderRequest, default: factory } = mod;

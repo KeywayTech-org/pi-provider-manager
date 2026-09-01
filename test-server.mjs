@@ -5,8 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert";
 
-const require = createRequire(import.meta.url);
-const { createJiti } = require("C:/Users/87659/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti");
+import { createJiti } from "jiti";
 const jiti = createJiti(import.meta.url);
 const mod = await jiti("./provider-manager.ts");
 const { configPaths, startServer } = mod;
