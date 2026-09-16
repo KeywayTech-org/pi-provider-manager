@@ -17,6 +17,10 @@
     "vite"
   ],
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/KeywayTech-org/pi-provider-manager.git"
+  },
   "files": [
     "provider-manager.ts",
     "web/dist"
