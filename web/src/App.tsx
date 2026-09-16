@@ -72,9 +72,6 @@ export default function App() {
 		setProviders(next);
 		persist(next, settings);
 	}
-	function handleSaveDefaults() {
-		persist(providers, settings);
-	}
 	function handleAdd() {
 		const name = addName.trim();
 		if (!name) {
@@ -117,12 +114,9 @@ export default function App() {
 							setAddOpen(true);
 						}}
 						onDelete={setDelTarget}
-						settings={settings}
-						onChangeSettings={setSettings}
-						onSaveSettings={handleSaveDefaults}
 					/>
 				}
-				header={<AppHeader title={selected || "供应商管理"} />}
+				header={<AppHeader />}
 			>
 				{!loaded ? (
 					<div className="py-20 text-center text-sm text-muted-foreground">

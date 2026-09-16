@@ -4,10 +4,7 @@ import { useState } from "react";
 import {
 	Card,
 	CardContent,
-	CardDescription,
 	CardFooter,
-	CardHeader,
-	CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -258,14 +255,8 @@ export function ProviderEditor({
 	}
 
 	return (
-		<Card>
-			<CardHeader>
-				<CardTitle>{name}</CardTitle>
-				<CardDescription>
-					ID 为 models.json 的键，保存后写入文件并自动备份。
-				</CardDescription>
-			</CardHeader>
-			<CardContent className="space-y-4">
+		<Card className="flex min-h-0 flex-1 flex-col rounded-none bg-transparent ring-0">
+			<CardContent className="flex min-h-0 flex-1 flex-col gap-4">
 				<div className="grid gap-4 md:grid-cols-2">
 					<div className="space-y-2">
 						<Label>显示名称</Label>
@@ -331,7 +322,7 @@ export function ProviderEditor({
 					</div>
 				</div>
 
-				<div className="space-y-2">
+				<div className="flex min-h-0 flex-1 flex-col gap-2">
 					<div className="flex items-center justify-between">
 						<Label>模型列表</Label>
 						<div className="flex gap-2">
@@ -348,7 +339,7 @@ export function ProviderEditor({
 							</Button>
 						</div>
 					</div>
-					<div className="rounded-md border">
+					<div className="min-h-0 flex-1 overflow-y-auto rounded-md border">
 						<Table>
 							<TableHeader>
 								<TableRow>
@@ -455,7 +446,7 @@ export function ProviderEditor({
 					</div>
 				</div>
 			</CardContent>
-			<CardFooter className="justify-end gap-2">
+			<CardFooter className="justify-end gap-2 rounded-none border-t-0 bg-transparent">
 				<Button variant="outline" onClick={handleTest}>
 					<PlugZap className="size-4" />
 					测试连接

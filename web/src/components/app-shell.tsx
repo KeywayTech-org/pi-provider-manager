@@ -11,13 +11,13 @@ export function AppShell({
 	children: React.ReactNode;
 }) {
 	return (
-		<div className="overflow-hidden">
-			<SidebarProvider className="relative mx-auto h-screen w-full max-w-6xl lg:border-x">
-				<FullWidthDivider className="top-14 z-60 -translate-y-px" />
+		<div className="h-dvh overflow-hidden">
+			<SidebarProvider className="relative mx-auto h-dvh w-full max-w-6xl overflow-hidden lg:border-x">
+				<FullWidthDivider className="top-14 z-60 -translate-y-px md:hidden" />
 				{sidebar}
-				<SidebarInset className="min-h-screen">
+				<SidebarInset className="min-h-0 rounded-none">
 					{header}
-					<div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-6">
+					<div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 md:p-6">
 						{children}
 					</div>
 				</SidebarInset>
