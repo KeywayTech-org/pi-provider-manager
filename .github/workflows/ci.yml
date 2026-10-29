@@ -31,3 +31,4 @@ jobs:
         run: |
           node test-config.mjs
           node test-server.mjs
+          node test-i18n.mjs

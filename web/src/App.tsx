@@ -22,8 +22,10 @@ import {
 	type Settings,
 } from "@/lib/api";
 import { toast } from "sonner";
+import { useI18n } from "@/i18n";
 
 export default function App() {
+	const { t } = useI18n();
 	const [providers, setProviders] = useState<Record<string, Provider>>({});
 	const [settings, setSettings] = useState<Settings>({});
 	const [selected, setSelected] = useState<string | null>(null);
@@ -44,7 +46,7 @@ export default function App() {
 			const names = Object.keys(c.providers);
 			setSelected((prev) => (prev && names.includes(prev) ? prev : names[0] || null));
 		} catch (e) {
-			toast.error("加载失败: " + String((e as Error)?.message || e));
+			toast.error(t("app.loadFailed", { message: String((e as Error)?.message || e) }));
 		} finally {
 			setLoaded(true);
 		}
@@ -54,14 +56,14 @@ export default function App() {
 		return saveConfig({ providers: next, settings: s })
 			.then((j) => {
 				if (j.ok) {
-					toast.success("已保存（已自动备份），打开 /model 或重启 pi 生效");
+					toast.success(t("app.saved"));
 					return true;
 				}
-				toast.error(j.error || "保存失败");
+				toast.error(j.error || t("app.saveFailed"));
 				return false;
 			})
 			.catch((e) => {
-				toast.error("保存失败: " + String((e as Error)?.message || e));
+				toast.error(t("app.saveFailedWith", { message: String((e as Error)?.message || e) }));
 				return false;
 			});
 	}
@@ -75,11 +77,11 @@ export default function App() {
 	function handleAdd() {
 		const name = addName.trim();
 		if (!name) {
-			toast.error("请输入 ID");
+			toast.error(t("app.addIdRequired"));
 			return;
 		}
 		if (providers[name]) {
-			toast.error("ID 已存在");
+			toast.error(t("app.addIdExists"));
 			return;
 		}
 		const next = {
@@ -90,7 +92,7 @@ export default function App() {
 		setSelected(name);
 		setAddOpen(false);
 		setAddName("");
-		toast.success("已创建，填好后点「保存供应商」");
+		toast.success(t("app.addCreated"));
 	}
 	function handleDelete() {
 		if (!delTarget) return;
@@ -120,7 +122,7 @@ export default function App() {
 			>
 				{!loaded ? (
 					<div className="py-20 text-center text-sm text-muted-foreground">
-						加载中…
+						{t("common.loading")}
 					</div>
 				) : selected && providers[selected] ? (
 					<ProviderEditor
@@ -133,10 +135,8 @@ export default function App() {
 					<div className="flex flex-1 items-center justify-center">
 						<Card className="max-w-sm">
 							<CardContent className="py-10 text-center">
-								<p className="text-sm font-medium">从左侧选择或新增一个供应商</p>
-								<p className="mt-1 text-xs text-muted-foreground">
-									配置写入 ~/.pi/agent/models.json，保存后打开 /model 即生效
-								</p>
+								<p className="text-sm font-medium">{t("app.emptyTitle")}</p>
+								<p className="mt-1 text-xs text-muted-foreground">{t("app.emptyHint")}</p>
 								<Button
 									className="mt-4"
 									onClick={() => {
@@ -144,7 +144,7 @@ export default function App() {
 										setAddOpen(true);
 									}}
 								>
-									+ 新增供应商
+									+ {t("app.emptyAdd")}
 								</Button>
 							</CardContent>
 						</Card>
@@ -155,20 +155,18 @@ export default function App() {
 			<Dialog open={addOpen} onOpenChange={setAddOpen}>
 				<DialogContent className="sm:max-w-sm">
 					<DialogHeader>
-						<DialogTitle>新增供应商</DialogTitle>
-						<DialogDescription>
-							ID 将作为 models.json 的键，例如 deepseek、b-ai。
-						</DialogDescription>
+						<DialogTitle>{t("app.addTitle")}</DialogTitle>
+						<DialogDescription>{t("app.addDescription")}</DialogDescription>
 					</DialogHeader>
 					<Input
 						autoFocus
 						value={addName}
 						onChange={(e) => setAddName(e.target.value)}
-						placeholder="供应商 ID"
+						placeholder={t("app.addIdPlaceholder")}
 						onKeyDown={(e) => e.key === "Enter" && handleAdd()}
 					/>
 					<DialogFooter>
-						<Button onClick={handleAdd}>创建</Button>
+						<Button onClick={handleAdd}>{t("app.addCreate")}</Button>
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
@@ -176,17 +174,17 @@ export default function App() {
 			<Dialog open={!!delTarget} onOpenChange={(o) => !o && setDelTarget(null)}>
 				<DialogContent className="sm:max-w-sm">
 					<DialogHeader>
-						<DialogTitle>删除供应商</DialogTitle>
+						<DialogTitle>{t("app.deleteTitle")}</DialogTitle>
 						<DialogDescription>
-							将删除 {delTarget} 并写入 models.json（会先自动备份）。此操作不可在页面内撤销。
+							{t("app.deleteDescription", { name: delTarget ?? "" })}
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter>
 						<Button variant="outline" onClick={() => setDelTarget(null)}>
-							取消
+							{t("common.cancel")}
 						</Button>
 						<Button variant="destructive" onClick={handleDelete}>
-							删除
+							{t("common.delete")}
 						</Button>
 					</DialogFooter>
 				</DialogContent>

@@ -111,6 +111,23 @@ npm publish                    # 发布；tarball 已通过 prepack 自动构建
 
 ---
 
+## 🌐 语言 / Language
+
+Web 界面提供英文与简体中文两种语言，可在侧边栏顶部一键切换，选择会保存在 `localStorage`：
+
+| 优先级 | 来源 |
+|---|---|
+| 1 | URL 参数 `?lang=en` / `?lang=zh`（便于截图与复现问题） |
+| 2 | 侧边栏切换后记住的选择（`localStorage["pi-provider-manager.locale"]`） |
+| 3 | 浏览器语言 `navigator.languages`（`zh*` → 中文） |
+| 4 | 默认英文 |
+
+The web UI ships with **English** and **简体中文**. Switch language from the sidebar header; the choice is persisted in `localStorage`. Resolution order: `?lang=en|zh` → stored choice → `navigator.languages` (`zh*` → Chinese) → English.
+
+Strings live in `web/src/i18n/messages.ts` (one dictionary per locale, `en` is the source of truth for the key type). Adding a locale means adding one file entry to `MESSAGES` in `web/src/i18n/locale.ts` — `node test-i18n.mjs` fails if keys or `{placeholders}` ever diverge between locales.
+
+---
+
 ## 🚀 使用
 
 1. 在 pi 中输入 `/providers`。
@@ -188,6 +205,9 @@ node test-config.mjs
 
 # 端到端（真实启动服务器 + 临时配置目录，验证读/写/打码/合并/删除）
 node test-server.mjs
+
+# i18n 字典（键与占位符对齐、代码中使用的键都存在、服务端错误码有翻译）
+node test-i18n.mjs
 ```
 
 测试通过 `jiti` 加载 `provider-manager.ts`，需要本机已安装 pi-coding-agent（其 `node_modules` 中含 `jiti`）。若 `jiti` 路径因升级而变化，请同步修改两个测试文件顶部的 `jiti` 绝对路径。

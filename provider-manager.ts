@@ -43,6 +43,9 @@ export function maskKey(providers: Record<string, any>): Record<string, any> {
   return out;
 }
 
+/** Error codes the web UI knows how to translate; anything else is shown verbatim. */
+export type ProviderErrorCode = "BASE_URL_REQUIRED" | "REQUEST_FAILED" | "CONNECTION_FAILED";
+
 export interface NormalizedModel {
   id: string;
   name?: string;
@@ -150,13 +153,21 @@ export async function fetchRemoteModels(params: {
   api?: string;
   apiKey?: string;
   headers?: Record<string, string>;
-}): Promise<{ ok: boolean; models?: NormalizedModel[]; error?: string; attempts?: string[] }> {
+}): Promise<{
+  ok: boolean;
+  models?: NormalizedModel[];
+  /** English fallback message; the web UI localizes via `code` when possible. */
+  error?: string;
+  /** Stable identifier for errors the UI can translate (see web/src/i18n). */
+  code?: ProviderErrorCode;
+  attempts?: string[];
+}> {
   const { models: modelsFile } = configPaths();
   const diskModels = await readJson(modelsFile);
   const diskProvider = params.provider ? (diskModels.providers || {})[params.provider] : undefined;
 
   let baseUrl = params.baseUrl || diskProvider?.baseUrl;
-  if (!baseUrl) return { ok: false, error: "请提供 Base URL" };
+  if (!baseUrl) return { ok: false, code: "BASE_URL_REQUIRED", error: "Base URL is required" };
   baseUrl = baseUrl.trim();
 
   const api = params.api || diskProvider?.api || "openai-completions";
@@ -214,7 +225,10 @@ export async function fetchRemoteModels(params: {
   }
 
   pmLog(`fetchRemoteModels failed: ${lastError || lastStatus}`);
-  return { ok: false, error: lastError || (lastStatus ? `HTTP ${lastStatus}` : "请求失败"), attempts };
+  if (lastError || lastStatus) {
+    return { ok: false, error: lastError || `HTTP ${lastStatus}`, attempts };
+  }
+  return { ok: false, code: "REQUEST_FAILED", error: "Request failed", attempts };
 }
 
 /**
@@ -226,13 +240,21 @@ export async function testRemoteProvider(params: {
   api?: string;
   apiKey?: string;
   headers?: Record<string, string>;
-}): Promise<{ ok: boolean; status?: number; body?: string; error?: string }> {
+}): Promise<{
+  ok: boolean;
+  status?: number;
+  body?: string;
+  /** English fallback message; the web UI localizes via `code` when possible. */
+  error?: string;
+  /** Stable identifier for errors the UI can translate (see web/src/i18n). */
+  code?: ProviderErrorCode;
+}> {
   const { models: modelsFile } = configPaths();
   const diskModels = await readJson(modelsFile);
   const diskProvider = params.provider ? (diskModels.providers || {})[params.provider] : undefined;
 
   let baseUrl = params.baseUrl || diskProvider?.baseUrl;
-  if (!baseUrl) return { ok: false, error: "请提供 Base URL" };
+  if (!baseUrl) return { ok: false, code: "BASE_URL_REQUIRED", error: "Base URL is required" };
   baseUrl = baseUrl.trim();
 
   const api = params.api || diskProvider?.api || "openai-completions";
@@ -245,9 +267,16 @@ export async function testRemoteProvider(params: {
   const { targetUrls, headers: reqHeaders } = buildProviderRequest(baseUrl, api, apiKey, headers);
 
   pmLog(`testRemoteProvider start: urls=${JSON.stringify(targetUrls)} api=${api}`);
-  let lastResult: { ok: boolean; status?: number; body?: string; error?: string } = {
+  let lastResult: {
+    ok: boolean;
+    status?: number;
+    body?: string;
+    error?: string;
+    code?: ProviderErrorCode;
+  } = {
     ok: false,
-    error: "连接失败",
+    code: "CONNECTION_FAILED",
+    error: "Connection failed",
   };
 
   for (const target of targetUrls) {

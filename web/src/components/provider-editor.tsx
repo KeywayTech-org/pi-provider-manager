@@ -39,6 +39,8 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useI18n } from "@/i18n";
+import type { Translate } from "@/i18n/locale";
 
 type FormState = {
 	name: string;
@@ -50,14 +52,35 @@ type FormState = {
 	models: Model[];
 };
 
-function parseJson(value: string, label: string): any | undefined {
+function parseJson(value: string, label: string, t: Translate): any | undefined {
 	const v = value.trim();
 	if (!v) return undefined;
 	try {
 		return JSON.parse(v);
 	} catch (e) {
-		toast.error(label + " 不是合法 JSON: " + ((e as Error)?.message || e));
+		toast.error(t("editor.jsonInvalid", { label, message: String((e as Error)?.message || e) }));
 		throw e;
+	}
+}
+
+/**
+ * Server errors arrive as an English `error` string plus, for the cases the UI
+ * can translate, a stable `code`. Fall back to the raw message otherwise (it is
+ * usually an upstream HTTP body fragment, which must stay verbatim).
+ */
+function serverMessage(
+	res: { error?: string; code?: string },
+	t: Translate
+): string {
+	switch (res.code) {
+		case "BASE_URL_REQUIRED":
+			return t("editor.serverBaseUrlRequired");
+		case "REQUEST_FAILED":
+			return t("editor.serverRequestFailed");
+		case "CONNECTION_FAILED":
+			return t("editor.serverConnectionFailed");
+		default:
+			return res.error || "";
 	}
 }
 
@@ -70,6 +93,7 @@ export function ProviderEditor({
 	provider: Provider;
 	onSave: (edited: Provider) => void;
 }) {
+	const { t } = useI18n();
 	const [form, setForm] = useState<FormState>(() => ({
 		name: provider.name || "",
 		baseUrl: provider.baseUrl || "",
@@ -99,9 +123,9 @@ export function ProviderEditor({
 		try {
 			const r = await fetch("/api/log");
 			const j = await r.json();
-			setLogContent(j.content || "(暂无日志)");
+			setLogContent(j.content || t("editor.logEmpty"));
 		} catch (e) {
-			setLogContent("读取日志失败: " + String((e as Error)?.message || e));
+			setLogContent(t("editor.logReadFailed", { message: String((e as Error)?.message || e) }));
 		} finally {
 			setLogLoading(false);
 		}
@@ -110,12 +134,12 @@ export function ProviderEditor({
 	async function handleFetch() {
 		const baseUrl = form.baseUrl.trim();
 		if (!baseUrl) {
-			toast.error("请先填写 Base URL");
+			toast.error(t("editor.baseUrlRequired"));
 			return;
 		}
 		let headers: any;
 		try {
-			headers = parseJson(form.headers, "headers");
+			headers = parseJson(form.headers, "headers", t);
 		} catch {
 			return;
 		}
@@ -130,17 +154,22 @@ export function ProviderEditor({
 				apiKey: form.apiKey,
 				headers,
 			});
-			if (!j.ok) throw new Error(
-			(j.error || "请求失败") +
-			(j.attempts?.length ? "\n\u5c1d试情况:\n" + j.attempts.join("\n") : "")
-		);
+			if (!j.ok) {
+				const reason = serverMessage(j, t);
+				throw new Error(
+					reason +
+						(j.attempts?.length
+							? "\n" + t("editor.attemptsHeader") + "\n" + j.attempts.join("\n")
+							: "")
+				);
+			}
 			const models = j.models || [];
 			setRemoteModels(models);
 			const existing = new Set(form.models.map((m) => m.id));
 			const fresh = models.filter((m) => !existing.has(m.id)).map((m) => m.id);
 			setCheckedIds(new Set(fresh.length > 0 ? fresh : models.map((m) => m.id)));
 		} catch (e) {
-			toast.error("获取模型失败: " + String((e as Error)?.message || e));
+			toast.error(t("editor.fetchFailed", { message: String((e as Error)?.message || e) }));
 			setFetchOpen(false);
 		} finally {
 			setFetchLoading(false);
@@ -180,21 +209,21 @@ export function ProviderEditor({
 
 		set({ models: updatedModels });
 		setFetchOpen(false);
-		const msgs = [];
-		if (addedCount > 0) msgs.push(`新增 ${addedCount} 个`);
-		if (updatedCount > 0) msgs.push(`更新 ${updatedCount} 个`);
-		toast.success(`已导入模型（${msgs.join("，")}），点「保存供应商」写入`);
+		const msgs: string[] = [];
+		if (addedCount > 0) msgs.push(t("editor.importAdded", { count: addedCount }));
+		if (updatedCount > 0) msgs.push(t("editor.importUpdated", { count: updatedCount }));
+		toast.success(t("editor.imported", { summary: msgs.join(t("editor.importJoiner")) }));
 	}
 
 	function handleTest() {
 		const baseUrl = form.baseUrl.trim();
 		if (!baseUrl) {
-			toast.error("请先填写 Base URL");
+			toast.error(t("editor.baseUrlRequired"));
 			return;
 		}
 		let headers: any;
 		try {
-			headers = parseJson(form.headers, "headers");
+			headers = parseJson(form.headers, "headers", t);
 		} catch {
 			return;
 		}
@@ -208,14 +237,22 @@ export function ProviderEditor({
 			.then((j) => {
 				if (j.ok) {
 					toast.success(
-						"连接正常 (" + (j.status ?? "200") + ")" +
-							(j.body ? " — " + j.body.slice(0, 120) : "")
+						t("editor.connectionOk", {
+							status: j.status ?? "200",
+							body: j.body ? " — " + j.body.slice(0, 120) : "",
+						})
 					);
 				} else {
-					toast.error("连接失败: " + (j.error || "HTTP " + j.status));
+					toast.error(
+						t("editor.connectionFailed", {
+							message: serverMessage(j, t) || "HTTP " + j.status,
+						})
+					);
 				}
 			})
-			.catch((e) => toast.error("连接失败: " + String((e as Error)?.message || e)));
+			.catch((e) =>
+				toast.error(t("editor.connectionFailed", { message: String((e as Error)?.message || e) }))
+			);
 	}
 
 	function setModel(i: number, patch: Partial<Model>) {
@@ -237,8 +274,8 @@ export function ProviderEditor({
 	function handleSave() {
 		let headers: any, compat: any;
 		try {
-			headers = parseJson(form.headers, "headers");
-			compat = parseJson(form.compat, "compat");
+			headers = parseJson(form.headers, "headers", t);
+			compat = parseJson(form.compat, "compat", t);
 		} catch {
 			return;
 		}
@@ -259,7 +296,7 @@ export function ProviderEditor({
 			<CardContent className="flex min-h-0 flex-1 flex-col gap-4">
 				<div className="grid gap-4 md:grid-cols-2">
 					<div className="space-y-2">
-						<Label>显示名称</Label>
+						<Label>{t("editor.displayName")}</Label>
 						<Input
 							value={form.name}
 							onChange={(e) => set({ name: e.target.value })}
@@ -267,7 +304,7 @@ export function ProviderEditor({
 						/>
 					</div>
 					<div className="space-y-2">
-						<Label>API 类型</Label>
+						<Label>{t("editor.apiType")}</Label>
 						<Select value={form.api} onValueChange={(v) => set({ api: v })}>
 							<SelectTrigger>
 								<SelectValue />
@@ -290,18 +327,18 @@ export function ProviderEditor({
 						/>
 					</div>
 					<div className="space-y-2">
-						<Label>API Key（留空保留原值，输入则覆盖）</Label>
+						<Label>{t("editor.apiKey")}</Label>
 						<Input
 							type="password"
 							value={form.apiKey}
 							onChange={(e) => set({ apiKey: e.target.value })}
 							placeholder={
-								provider.apiKey ? "已配置，留空保留原值" : "输入 API Key"
+								provider.apiKey ? t("editor.apiKeyConfigured") : t("editor.apiKeyPlaceholder")
 							}
 						/>
 					</div>
 					<div className="space-y-2">
-						<Label>请求头 headers（JSON）</Label>
+						<Label>{t("editor.headers")}</Label>
 						<Textarea
 							value={form.headers}
 							onChange={(e) => set({ headers: e.target.value })}
@@ -311,7 +348,7 @@ export function ProviderEditor({
 						/>
 					</div>
 					<div className="space-y-2">
-						<Label>兼容设置 compat（JSON）</Label>
+						<Label>{t("editor.compat")}</Label>
 						<Textarea
 							value={form.compat}
 							onChange={(e) => set({ compat: e.target.value })}
@@ -324,18 +361,18 @@ export function ProviderEditor({
 
 				<div className="flex min-h-0 flex-1 flex-col gap-2">
 					<div className="flex items-center justify-between">
-						<Label>模型列表</Label>
+						<Label>{t("editor.models")}</Label>
 						<div className="flex gap-2">
 							<Button size="sm" variant="outline" onClick={handleFetch}>
 								<Download className="size-4" />
-								获取模型
+								{t("editor.fetchModels")}
 							</Button>
-							<Button size="sm" variant="ghost" onClick={openLog} title="查看调试日志">
+							<Button size="sm" variant="ghost" onClick={openLog} title={t("editor.viewLog")}>
 								<ScrollText className="size-4" />
 							</Button>
 							<Button size="sm" variant="outline" onClick={addModel}>
 								<Plus className="size-4" />
-								新增模型
+								{t("editor.addModel")}
 							</Button>
 						</div>
 					</div>
@@ -343,15 +380,15 @@ export function ProviderEditor({
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead className="min-w-36">ID</TableHead>
-									<TableHead>名称</TableHead>
-									<TableHead title="支持推理" className="w-12 text-center">
-										思考
+									<TableHead className="min-w-36">{t("editor.colId")}</TableHead>
+									<TableHead>{t("editor.colName")}</TableHead>
+									<TableHead title={t("editor.colReasoningTitle")} className="w-12 text-center">
+										{t("editor.colReasoning")}
 									</TableHead>
-									<TableHead className="w-12 text-center">文本</TableHead>
-									<TableHead className="w-12 text-center">图片</TableHead>
-									<TableHead>上下文窗口</TableHead>
-									<TableHead>最大输出</TableHead>
+									<TableHead className="w-12 text-center">{t("editor.colText")}</TableHead>
+									<TableHead className="w-12 text-center">{t("editor.colImage")}</TableHead>
+									<TableHead>{t("editor.colContext")}</TableHead>
+									<TableHead>{t("editor.colMaxTokens")}</TableHead>
 									<TableHead className="w-10" />
 								</TableRow>
 							</TableHeader>
@@ -371,7 +408,7 @@ export function ProviderEditor({
 												className="h-8"
 												value={m.name || ""}
 												onChange={(e) => setModel(i, { name: e.target.value })}
-												placeholder="显示名"
+												placeholder={t("editor.modelNamePlaceholder")}
 											/>
 										</TableCell>
 										<TableCell className="text-center">
@@ -437,7 +474,7 @@ export function ProviderEditor({
 											colSpan={8}
 											className="py-6 text-center text-sm text-muted-foreground"
 										>
-											暂无模型，点上方新增
+											{t("editor.emptyModels")}
 										</TableCell>
 									</TableRow>
 								)}
@@ -449,27 +486,25 @@ export function ProviderEditor({
 			<CardFooter className="justify-end gap-2 rounded-none border-t-0 bg-transparent">
 				<Button variant="outline" onClick={handleTest}>
 					<PlugZap className="size-4" />
-					测试连接
+					{t("editor.test")}
 				</Button>
-				<Button onClick={handleSave}>保存供应商</Button>
+				<Button onClick={handleSave}>{t("editor.save")}</Button>
 			</CardFooter>
 
 			<Dialog open={fetchOpen} onOpenChange={(o) => !fetchLoading && setFetchOpen(o)}>
 				<DialogContent className="sm:max-w-xl">
 					<DialogHeader>
-						<DialogTitle>从接口获取模型</DialogTitle>
-						<DialogDescription>
-							勾选要导入的模型，系统已自动解析特性（思考/视觉/上下文）。
-						</DialogDescription>
+						<DialogTitle>{t("editor.fetchDialogTitle")}</DialogTitle>
+						<DialogDescription>{t("editor.fetchDialogDescription")}</DialogDescription>
 					</DialogHeader>
 
 					{fetchLoading ? (
 						<div className="py-12 text-center text-sm text-muted-foreground">
-							正在连接供应商接口拉取模型列表…
+							{t("editor.fetching")}
 						</div>
 					) : remoteModels.length === 0 ? (
 						<div className="py-12 text-center text-sm text-muted-foreground">
-							未从接口获取到模型
+							{t("editor.fetchEmpty")}
 						</div>
 					) : (
 						<div className="space-y-3">
@@ -479,7 +514,7 @@ export function ProviderEditor({
 									<Input
 										value={searchQuery}
 										onChange={(e) => setSearchQuery(e.target.value)}
-										placeholder="搜索模型 ID 或名称…"
+										placeholder={t("editor.searchPlaceholder")}
 										className="pl-8 text-sm"
 									/>
 								</div>
@@ -494,7 +529,7 @@ export function ProviderEditor({
 										setCheckedIds((prev) => new Set([...prev, ...matching]));
 									}}
 								>
-									全选
+									{t("editor.selectAll")}
 								</Button>
 								<Button
 									size="sm"
@@ -513,7 +548,7 @@ export function ProviderEditor({
 										});
 									}}
 								>
-									全不选
+									{t("editor.selectNone")}
 								</Button>
 							</div>
 
@@ -556,7 +591,7 @@ export function ProviderEditor({
 															</span>
 															{isExisting && (
 																<Badge variant="outline" className="text-[10px] text-muted-foreground">
-																	已在列表中
+																	{t("editor.alreadyInList")}
 																</Badge>
 															)}
 														</div>
@@ -571,13 +606,13 @@ export function ProviderEditor({
 													{m.reasoning && (
 														<Badge variant="secondary" className="gap-1 text-[10px]">
 															<Brain className="size-3" />
-															思考
+															{t("editor.badgeReasoning")}
 														</Badge>
 													)}
 													{m.input?.includes("image") && (
 														<Badge variant="secondary" className="gap-1 text-[10px]">
 															<Eye className="size-3" />
-															视觉
+															{t("editor.badgeVision")}
 														</Badge>
 													)}
 													{m.contextWindow ? (
@@ -597,14 +632,17 @@ export function ProviderEditor({
 
 					<DialogFooter className="flex items-center justify-between sm:justify-between">
 						<div className="text-xs text-muted-foreground">
-							已勾选 {checkedIds.size} / {remoteModels.length} 个模型
+							{t("editor.selectedCount", {
+								selected: checkedIds.size,
+								total: remoteModels.length,
+							})}
 						</div>
 						<div className="flex gap-2">
 							<Button variant="outline" onClick={() => setFetchOpen(false)}>
-								取消
+								{t("common.cancel")}
 							</Button>
 							<Button disabled={checkedIds.size === 0} onClick={applyChecked}>
-								导入 {checkedIds.size} 个模型
+								{t("editor.importButton", { count: checkedIds.size })}
 							</Button>
 						</div>
 					</DialogFooter>
@@ -615,14 +653,18 @@ export function ProviderEditor({
 			<Dialog open={logOpen} onOpenChange={setLogOpen}>
 				<DialogContent className="max-w-3xl">
 					<DialogHeader>
-						<DialogTitle>调试日志（~/.pi/agent/pm-debug.log 最近 200 行）</DialogTitle>
+						<DialogTitle>{t("editor.logTitle")}</DialogTitle>
 					</DialogHeader>
 					<pre className="max-h-[60vh] overflow-auto rounded bg-muted p-3 text-xs font-mono whitespace-pre-wrap break-all">
-						{logLoading ? "加载中..." : (logContent || "(暂无日志)")}
+						{logLoading ? t("common.loading") : logContent || t("editor.logEmpty")}
 					</pre>
 					<DialogFooter>
-						<Button variant="outline" onClick={openLog} disabled={logLoading}>刷新</Button>
-						<Button variant="outline" onClick={() => setLogOpen(false)}>关闭</Button>
+						<Button variant="outline" onClick={openLog} disabled={logLoading}>
+							{t("common.refresh")}
+						</Button>
+						<Button variant="outline" onClick={() => setLogOpen(false)}>
+							{t("common.close")}
+						</Button>
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>

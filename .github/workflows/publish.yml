@@ -37,6 +37,7 @@ jobs:
         run: |
           node test-config.mjs
           node test-server.mjs
+          node test-i18n.mjs
 
       - name: Publish to npm
         run: npm publish --access public --provenance

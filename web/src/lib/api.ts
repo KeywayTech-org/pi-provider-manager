@@ -82,7 +82,7 @@ export type FetchModelsReq = {
 
 export async function testProvider(
   req: string | FetchModelsReq
-): Promise<{ ok: boolean; status?: number; body?: string; error?: string }> {
+): Promise<{ ok: boolean; status?: number; body?: string; error?: string; code?: string }> {
   if (typeof req === "string") {
     const r = await fetch("/api/test?provider=" + encodeURIComponent(req));
     return r.json();
@@ -97,7 +97,7 @@ export async function testProvider(
 
 export async function fetchModels(
   req: string | FetchModelsReq
-): Promise<{ ok: boolean; models?: Model[]; error?: string; attempts?: string[] }> {
+): Promise<{ ok: boolean; models?: Model[]; error?: string; code?: string; attempts?: string[] }> {
   if (typeof req === "string") {
     const r = await fetch("/api/models?provider=" + encodeURIComponent(req));
     return r.json();

@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Plus, ServerIcon, X } from "lucide-react";
 import type { Provider } from "@/lib/api";
+import { useI18n } from "@/i18n";
+import { LanguageToggle } from "@/components/language-toggle";
 
 export function AppSidebar({
 	providers,
@@ -26,6 +28,7 @@ export function AppSidebar({
 	onAdd: () => void;
 	onDelete: (name: string) => void;
 }) {
+	const { t } = useI18n();
 	const providerNames = Object.keys(providers);
 
 	return (
@@ -34,21 +37,24 @@ export function AppSidebar({
 			collapsible="offcanvas"
 			variant="sidebar"
 		>
-			<SidebarHeader className="relative h-14 items-center justify-center px-3"><span className="text-sm font-medium">Provider Manager</span></SidebarHeader>
+			<SidebarHeader className="relative h-14 flex-row items-center justify-between gap-2 px-3">
+				<span className="text-sm font-medium">Provider Manager</span>
+				<LanguageToggle className="h-6 px-2 text-xs text-muted-foreground" />
+			</SidebarHeader>
 
 			<SidebarContent>
 				<SidebarGroup>
 					<SidebarGroupLabel className="flex items-center justify-between pr-1">
-						<span className="font-normal">供应商</span>
+						<span className="font-normal">{t("sidebar.providers")}</span>
 						<Button size="sm" variant="outline" className="h-6 gap-1 px-2" onClick={onAdd}>
 							<Plus className="size-3.5" />
-							新增
+							{t("sidebar.add")}
 						</Button>
 					</SidebarGroupLabel>
 					<SidebarMenu className="gap-0.5">
 						{providerNames.length === 0 && (
 							<SidebarMenuItem>
-								<p className="px-3 py-2 text-sm text-muted-foreground">暂无供应商</p>
+								<p className="px-3 py-2 text-sm text-muted-foreground">{t("sidebar.empty")}</p>
 							</SidebarMenuItem>
 						)}
 						{providerNames.map((name) => {
@@ -74,7 +80,7 @@ export function AppSidebar({
 											{Array.isArray(p.models) ? p.models.length : 0}
 										</span>
 										<button
-											aria-label={"删除 " + name}
+											aria-label={t("sidebar.deleteAria", { name })}
 											onClick={(e) => {
 												e.stopPropagation();
 												onDelete(name);
